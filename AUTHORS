@@ -1,0 +1,12 @@
+Original Telnet Server code is based on the version created and written by the following people:
+
+- Sean Middleditch <sean@sourcemud.org>
+- Jack Kelly <endgame.dos@gmail.com>
+- Katherine Flavel <kate@elide.org>
+- Daniel Loffgren (https://github.com/RyuKojiro)
+
+and taken from here: [https://github.com/seanmiddleditch/libtelnet](https://github.com/seanmiddleditch/libtelnet)
+
+Midificatons are performed by:
+
+- FrozenEye (https://github.com/frozen-eye)

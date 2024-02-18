@@ -1,0 +1,28 @@
+menu "Telnet Server"
+
+    config TELNET_SERVER_DEFAULT_PORT
+        int "Default Telnet Server Port"
+        default 23
+        help
+            Default Telnet Server Port Number
+
+    config TELNET_SERVER_MAX_CONNECTIONS
+        int "Maximum Telnet Server Connections"
+        default 5
+        help
+            Maximum Number of Telnet Server Connections
+
+    config TELNET_SERVER_STACK_SIZE
+        int "Telnet Server Stack Size"
+        default 4096
+        help
+            Telnet Server Stack Size
+
+    config TELNET_SERVER_TASK_PRIO
+        int "Telnet Server Task Priority"
+        range 1 25
+        default 24
+        help
+            Telnet Server Task Priority. In case of high events rate, this parameter could be changed up to (configMAX_PRIORITIES-1).
+
+endmenu
