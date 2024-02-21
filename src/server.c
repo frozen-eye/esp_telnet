@@ -126,20 +126,6 @@ static void _online(const char* line, size_t overflow, void* ud)
     return;
   }
 
-  /* if line is "quit" then, well, quit */
-  if (strcmp(line, "quit") == 0) {
-    close(user->sock);
-    user->sock = -1;
-
-    // notify everyone
-    _broadcast(user->name, "** HAS QUIT **");
-
-    free(user->name);
-    user->name = 0;
-    telnet_free(user->telnet);
-    return;
-  }
-
   /* execute a command, need to send to the system */
   // _message(user->name, line);
 }
@@ -189,19 +175,24 @@ static void _event_handler(telnet_t* telnet, telnet_event_t* ev, void* user_data
 
 void telnet_task(void* arg)
 {
-  char buffer[512];
+  static char buffer[512];
+  static struct sockaddr_in addr;
+  static telnet_server_config_t config;
+
+  // save the configuration
+  memcpy(&config, arg, sizeof(telnet_server_config_t));
+
   int listen_sock;
   int client_sock;
   int rs;
   int i;
-  struct sockaddr_in addr;
   socklen_t addrlen;
-  struct pollfd pfd[CONFIG_TELNET_SERVER_MAX_CONNECTIONS + 1];
+  struct pollfd pfd[config.max_connections + 1];
 
   /* initialize data structures */
   memset(&pfd, 0, sizeof(pfd));
   memset(users, 0, sizeof(users));
-  for (i = 0; i != CONFIG_TELNET_SERVER_MAX_CONNECTIONS; ++i) {
+  for (i = 0; i != config.max_connections; ++i) {
     users[i].sock = -1;
   }
 
@@ -219,7 +210,7 @@ void telnet_task(void* arg)
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = INADDR_ANY;
-  addr.sin_port = htons(CONFIG_TELNET_SERVER_DEFAULT_PORT);
+  addr.sin_port = htons(config.port);
   if (bind(listen_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
     ESP_LOGE(TAG, "bind() failed: %s", strerror(errno));
     close(listen_sock);
@@ -233,19 +224,16 @@ void telnet_task(void* arg)
     return;
   }
 
-  ESP_LOGV(TAG, "Telnet server listening on port %d", CONFIG_TELNET_SERVER_DEFAULT_PORT);
+  ESP_LOGI(TAG, "Telnet server listening on port %d", config.port);
 
   /* initialize listening descriptors */
-  pfd[CONFIG_TELNET_SERVER_MAX_CONNECTIONS].fd = listen_sock;
-  pfd[CONFIG_TELNET_SERVER_MAX_CONNECTIONS].events = POLLIN;
+  pfd[config.max_connections].fd = listen_sock;
+  pfd[config.max_connections].events = POLLIN;
 
   /* loop for ever */
   while (true) {
-    /* wait a little not to raise wdt */
-    // vTaskDelay(10 / portTICK_PERIOD_MS);
-
     /* prepare for poll */
-    for (i = 0; i != CONFIG_TELNET_SERVER_MAX_CONNECTIONS; ++i) {
+    for (i = 0; i != config.max_connections; ++i) {
       if (users[i].sock != -1) {
         pfd[i].fd = users[i].sock;
         pfd[i].events = POLLIN;
@@ -257,7 +245,7 @@ void telnet_task(void* arg)
     }
 
     /* poll */
-    rs = poll(pfd, CONFIG_TELNET_SERVER_MAX_CONNECTIONS + 1, AWAIT_TIMEOUT);
+    rs = poll(pfd, config.max_connections + 1, AWAIT_TIMEOUT);
     if (rs == -1 && errno != EINTR) {
       ESP_LOGE(TAG, "poll() failed: %s", strerror(errno));
       close(listen_sock);
@@ -265,7 +253,7 @@ void telnet_task(void* arg)
     }
 
     /* new connection */
-    if (pfd[CONFIG_TELNET_SERVER_MAX_CONNECTIONS].revents & (POLLIN | POLLRDNORM | POLLRDBAND | POLLPRI | POLLERR | POLLHUP)) {
+    if (pfd[config.max_connections].revents & (POLLIN | POLLRDNORM | POLLRDBAND | POLLPRI | POLLERR | POLLHUP)) {
       /* acept the sock */
       ESP_LOGW(TAG, "New connection");
       addrlen = sizeof(addr);
@@ -277,10 +265,13 @@ void telnet_task(void* arg)
       ESP_LOGV(TAG, "Connection received");
 
       /* find a free user */
-      for (i = 0; i != CONFIG_TELNET_SERVER_MAX_CONNECTIONS; ++i)
-        if (users[i].sock == -1)
+      for (i = 0; i != config.max_connections; ++i) {
+        if (users[i].sock == -1) {
           break;
-      if (i == CONFIG_TELNET_SERVER_MAX_CONNECTIONS) {
+        }
+      }
+
+      if (i == config.max_connections) {
         ESP_LOGV(TAG, "  rejected (too many users)");
         _send(client_sock, "Too many users.\n", 16);
         close(client_sock);
@@ -288,7 +279,7 @@ void telnet_task(void* arg)
 
       /* init, welcome */
       users[i].sock = client_sock;
-      users[i].telnet = telnet_init(telopts, _event_handler, 0, &users[i]);
+      users[i].telnet = telnet_init(config.telnet_opts, _event_handler, 0, &users[i]);
       telnet_negotiate(users[i].telnet, TELNET_WILL, TELNET_TELOPT_COMPRESS2);
       telnet_printf(users[i].telnet, "Enter name: ");
 
@@ -296,10 +287,11 @@ void telnet_task(void* arg)
     }
 
     /* read from client */
-    for (i = 0; i != CONFIG_TELNET_SERVER_MAX_CONNECTIONS; ++i) {
+    for (i = 0; i != config.max_connections; ++i) {
       /* skip users that aren't actually connected */
-      if (users[i].sock == -1)
+      if (users[i].sock == -1) {
         continue;
+      }
 
       if (pfd[i].revents & (POLLIN | POLLERR | POLLHUP)) {
         if ((rs = recv(users[i].sock, buffer, sizeof(buffer), 0)) > 0) {
@@ -310,7 +302,7 @@ void telnet_task(void* arg)
           close(users[i].sock);
           users[i].sock = -1;
           if (users[i].name != 0) {
-            _message(users[i].name, "** HAS DISCONNECTED **");
+            // _message(users[i].name, "** HAS DISCONNECTED **");
             free(users[i].name);
             users[i].name = 0;
           }
@@ -325,24 +317,20 @@ void telnet_task(void* arg)
   }
 }
 
-void start_telnet_server(void) {}
-
-static BaseType_t xReturned;
 static TaskHandle_t xHandle = NULL;
 
-static void register_telnet_server(void)
+esp_err_t telnet_server_create(telnet_server_config_t* config)
 {
-  xReturned =
-    xTaskCreate(telnet_task, "telnet_task", CONFIG_TELNET_SERVER_STACK_SIZE, NULL, CONFIG_TELNET_SERVER_TASK_PRIO, &xHandle);
+  if (config == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  BaseType_t xReturned = xTaskCreate(telnet_task, "telnet_task", config->stack_size, config, config->task_priority, &xHandle);
   if (xReturned == pdPASS) {
     ESP_LOGV(TAG, "Telnet task created successfully.");
+    return ESP_OK;
   }
-  else {
-    ESP_LOGE(TAG, "Failed to create telnet task.");
-  }
-}
 
-void telnet_server(void)
-{
-  register_telnet_server();
+  ESP_LOGE(TAG, "Failed to create telnet task.");
+  return ESP_FAIL;
 }

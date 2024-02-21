@@ -18,11 +18,24 @@ menu "Telnet Server"
         help
             Telnet Server Stack Size
 
-    config TELNET_SERVER_TASK_PRIO
+    config TELNET_SERVER_TASK_PRIORITY
         int "Telnet Server Task Priority"
         range 1 25
         default 24
         help
             Telnet Server Task Priority. In case of high events rate, this parameter could be changed up to (configMAX_PRIORITIES-1).
 
+    config TELNET_SERVER_TASK_CORE
+        int "Telnet Server Task Core"
+        range 0 1
+        default 0
+        help
+            Telnet Server Task Core
+
+    config TELNET_SERVER_REDIRECT_LOGS
+        int "Redirect Logs to Telnet Server"
+        range 0 1
+        default 0
+        help
+            Redirect Logs to Telnet Server
 endmenu

@@ -1,5 +1,6 @@
-version: "0.0.1"
+dependencies:
+  idf:
+    version: '>=4.0'
 description: esp_telnet is a small implementation of the telnet server.
 url: https://github.com/frozen-eye/esp_telnet.git
-dependencies:
-  idf: ">=4.0"
+version: 0.0.2
