@@ -1,8 +1,18 @@
 #include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 
+/**
+ * @brief The size of the line buffer used in the server.
+ */
 #define LINEBUFFER_SIZE 256
-#define AWAIT_TIMEOUT   10
+
+/**
+ * @brief Timeout value for awaiting a response.
+ *
+ * This constant defines the timeout value (in milliseconds) for awaiting a response.
+ * It is set to 10 milliseconds by default.
+ */
+#define AWAIT_TIMEOUT 10
 
 #include <esp_log.h>
 #include <libtelnet.h>
@@ -11,8 +21,27 @@
 #include <telnet/server.h>
 
 static const char* TAG = "telnet";
+
+/**
+ * @brief Array of user structures representing the connected users.
+ *
+ * This array stores information about the connected users in the Telnet server.
+ * Each element of the array represents a user and contains relevant user data.
+ * The size of the array is determined by the CONFIG_TELNET_SERVER_MAX_CONNECTIONS constant.
+ * The "+ 1" is added to accommodate an extra slot for a new connection.
+ */
 static struct user_t users[CONFIG_TELNET_SERVER_MAX_CONNECTIONS + 1];
 
+/**
+ * @brief Pushes a character into the line buffer.
+ *
+ * This function appends the given character to the line buffer, updating the line position accordingly.
+ *
+ * @param buffer The line buffer.
+ * @param size The size of the line buffer.
+ * @param linepos Pointer to the current line position.
+ * @param ch The character to be pushed into the line buffer.
+ */
 static void linebuffer_push(char* buffer, size_t size, int* linepos, char ch,
                             void (*cb)(const char* line, size_t overflow, void* ud), void* ud)
 {
@@ -46,6 +75,14 @@ static void linebuffer_push(char* buffer, size_t size, int* linepos, char ch,
   }
 }
 
+/**
+ * @brief Prints a message from a specified source.
+ *
+ * This function is used to print a message from a specified source.
+ *
+ * @param from The source of the message.
+ * @param msg The message to be printed.
+ */
 static void _message(const char* from, const char* msg)
 {
   int i;
@@ -56,6 +93,14 @@ static void _message(const char* from, const char* msg)
   }
 }
 
+/**
+ * @brief Broadcasts a message from a specified sender to all connected clients.
+ *
+ * This function sends a message to all connected clients, specifying the sender's name and the message content.
+ *
+ * @param from The name of the sender.
+ * @param msg The message to be broadcasted.
+ */
 static void _broadcast(const char* from, const char* msg)
 {
   int i;
@@ -66,6 +111,13 @@ static void _broadcast(const char* from, const char* msg)
   }
 }
 
+/**
+ * Sends data over a socket.
+ *
+ * @param sock The socket descriptor.
+ * @param buffer The buffer containing the data to send.
+ * @param size The size of the data to send.
+ */
 static void _send(int sock, const char* buffer, size_t size)
 {
   int rs;
@@ -96,7 +148,28 @@ static void _send(int sock, const char* buffer, size_t size)
   }
 }
 
+/**
+ * Handles the input line from a user.
+ *
+ * @param user The user object.
+ * @param line The input line from the user.
+ */
+static void _handle(struct user_t* user, const char* line)
+{
+  return;
+}
+
 /* process input line */
+/**
+ * @brief Sets the user online status.
+ *
+ * This function is called when the user goes online.
+ * It updates the online status of the user and performs any necessary actions.
+ *
+ * @param line The command line received.
+ * @param overflow The overflow size.
+ * @param ud User data.
+ */
 static void _online(const char* line, size_t overflow, void* ud)
 {
   struct user_t* user = (struct user_t*)ud;
@@ -126,10 +199,22 @@ static void _online(const char* line, size_t overflow, void* ud)
     return;
   }
 
+  _handle(user, line);
+
   /* execute a command, need to send to the system */
   // _message(user->name, line);
 }
 
+/**
+ * @brief Handles the input from a user.
+ *
+ * This function is responsible for processing the input received from a user and performing the necessary actions based on the
+ * input.
+ *
+ * @param user Pointer to the user structure.
+ * @param buffer Pointer to the input buffer.
+ * @param size Size of the input buffer.
+ */
 static void _input(struct user_t* user, const char* buffer, size_t size)
 {
   unsigned int i;
@@ -138,6 +223,16 @@ static void _input(struct user_t* user, const char* buffer, size_t size)
   }
 }
 
+/**
+ * @brief Event handler function for the telnet server.
+ *
+ * This function is called when a telnet event occurs. It handles the event
+ * and performs the necessary actions based on the event type.
+ *
+ * @param telnet The telnet server instance.
+ * @param ev The telnet event.
+ * @param user_data User-defined data passed to the event handler.
+ */
 static void _event_handler(telnet_t* telnet, telnet_event_t* ev, void* user_data)
 {
   struct user_t* user = (struct user_t*)user_data;
@@ -173,6 +268,13 @@ static void _event_handler(telnet_t* telnet, telnet_event_t* ev, void* user_data
   }
 }
 
+/**
+ * @brief Task function for handling Telnet connections.
+ *
+ * This function is responsible for handling Telnet connections. It is executed as a separate task.
+ *
+ * @param arg Pointer to the task argument (not used in this function).
+ */
 void telnet_task(void* arg)
 {
   static char buffer[512];
@@ -298,7 +400,7 @@ void telnet_task(void* arg)
           telnet_recv(users[i].telnet, buffer, rs);
         }
         else if (rs == 0) {
-          ESP_LOGV(TAG, "Connection closed.");
+          ESP_LOGW(TAG, "Closed connection");
           close(users[i].sock);
           users[i].sock = -1;
           if (users[i].name != 0) {
@@ -319,6 +421,14 @@ void telnet_task(void* arg)
 
 static TaskHandle_t xHandle = NULL;
 
+/**
+ * @brief Creates a Telnet server with the specified configuration.
+ *
+ * This function creates a Telnet server using the provided configuration.
+ *
+ * @param config Pointer to the configuration structure.
+ * @return `ESP_OK` if the Telnet server is created successfully, or an error code if it fails.
+ */
 esp_err_t telnet_server_create(telnet_server_config_t* config)
 {
   if (config == NULL) {

@@ -4,7 +4,6 @@ idf_component_register(
   INCLUDE_DIRS
   include
   src
-  .
   SRCS
   src/libtelnet.c
   src/server.c
